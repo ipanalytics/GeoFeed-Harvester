@@ -51,7 +51,7 @@ jobs:
         run: |
           gzip -9 -c dist/geofeed.csv > dist/geofeed.csv.gz
           gzip -9 -c dist/geofeed.jsonl > dist/geofeed.jsonl.gz
-          sha256sum dist/geofeed.csv dist/geofeed.csv.gz dist/geofeed.jsonl dist/geofeed.jsonl.gz > dist/SHA256SUMS
+          sha256sum dist/geofeed.csv.gz dist/geofeed.jsonl.gz dist/changelog.md > dist/SHA256SUMS
 
       - name: Upload dataset artifact
         uses: actions/upload-artifact@v4
@@ -63,6 +63,33 @@ jobs:
             dist/changelog.md
             dist/SHA256SUMS
           retention-days: 30
+
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags
+          git tag -f latest "$GITHUB_SHA"
+          git push origin latest --force
+
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest \
+              --title "Latest GeoFeed Dataset" \
+              --notes-file dist/changelog.md \
+              --latest
+          else
+            gh release create latest \
+              --title "Latest GeoFeed Dataset" \
+              --notes-file dist/changelog.md \
+              --latest
+          fi
+
+          gh release upload latest \
+            dist/geofeed.csv.gz \
+            dist/geofeed.jsonl.gz \
+            dist/changelog.md \
+            dist/SHA256SUMS \
+            --clobber
 
       - name: Commit small run metadata
         run: |
