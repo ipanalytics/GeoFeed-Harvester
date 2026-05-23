@@ -1,0 +1,55 @@
+name: harvest
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Restore harvester cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/geofeeds
+            .cache/rir-bulk
+            .cache/direct-geofeeds
+          key: geofeed-harvester-${{ github.run_id }}
+          restore-keys: |
+            geofeed-harvester-
+
+      - name: Harvest
+        run: |
+          geofeed-harvester \
+            --auto-discover \
+            --out-dir dist \
+            --cache-dir .cache/geofeeds \
+            --bulk-dir .cache/rir-bulk \
+            --direct-geofeed-dir .cache/direct-geofeeds \
+            --normalized-rir-dump data/rir.txt \
+            --concurrency 32 \
+            --bgp-validator cymru
+
+      - name: Commit published dataset
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist data/rir.txt
+          git diff --cached --quiet || git commit -m "Update harvested geofeed dataset"
+          git push
