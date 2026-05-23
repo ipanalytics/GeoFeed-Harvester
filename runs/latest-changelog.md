@@ -1,11 +1,11 @@
 # GeoFeed Harvester Changelog
 
-- Valid rows: 505394
-- Rows with flags: 61155
+- Valid rows: 504829
+- Rows with flags: 60617
 
 ## By RIR
 
-- AFRINIC: 2293
-- APNIC: 20324
+- AFRINIC: 2294
+- APNIC: 20342
 - LACNIC: 12769
-- RIPE: 470008
+- RIPE: 469424
