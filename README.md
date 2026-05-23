@@ -13,17 +13,17 @@ repackaging opaque commercial GeoIP databases.
 <!-- GEOFEED_STATS_START -->
 ## Latest Run
 
-- Generated at: `2026-05-23T12:04:26+00:00`
-- Valid rows: `505,442`
-- Raw rows: `567,642`
-- Unique prefixes: `505,442`
-- Unique geofeed URLs: `3,358`
-- Countries: `301`
-- Failed geofeed fetches: `868`
-- Added / removed / changed prefixes: `99` / `52` / `214`
-- CSV gzip size: `0 B`
-- JSONL gzip size: `0 B`
-- Parquet size: `2.9 MB`
+- Generated at: `not published yet`
+- Valid rows: `pending`
+- Raw rows: `pending`
+- Unique prefixes: `pending`
+- Unique geofeed URLs: `pending`
+- Countries: `pending`
+- Failed geofeed fetches: `pending`
+- Added / removed / changed prefixes: `pending`
+- CSV gzip size: `pending`
+- JSONL gzip size: `pending`
+- Parquet size: `pending`
 
 <!-- GEOFEED_STATS_END -->
 
@@ -72,8 +72,8 @@ latest run from:
 https://github.com/ipanalytics/GeoFeed-Harvester/actions/workflows/harvest.yml
 ```
 
-The daily workflow also publishes a rolling `latest` release. Download the
-latest release assets:
+The daily workflow publishes a date-stamped GitHub Release and marks it as the
+latest release. Download the latest release assets through stable URLs:
 
 ```bash
 curl -L -o geofeed.csv.gz \
@@ -260,7 +260,9 @@ dist/changelog.md
 dist/SHA256SUMS
 ```
 
-to a rolling `latest` release.
+to a date-stamped release such as `dataset-2026-05-23` and marks that release
+as GitHub's latest release. Stable `/releases/latest/download/...` URLs continue
+to work.
 
 The default workflow does not enable Team Cymru checks because GitHub-hosted
 runners can hit TCP/43 rate limits or empty responses. Run `--bgp-validator
@@ -365,5 +367,4 @@ valuable additions are:
 
 - authenticated ARIN bulk adapter;
 - first-class CMS signature discovery for signed geofeeds;
-- date-stamped GitHub release publishing in addition to the rolling `latest`
-  release.
+- optional release retention policy for historical daily datasets.
