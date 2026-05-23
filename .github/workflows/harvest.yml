@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   harvest:
@@ -46,10 +47,30 @@ jobs:
             --normalized-rir-dump data/rir.txt \
             --concurrency 32
 
-      - name: Commit published dataset
+      - name: Compress dataset
+        run: |
+          gzip -9 -c dist/geofeed.csv > dist/geofeed.csv.gz
+          gzip -9 -c dist/geofeed.jsonl > dist/geofeed.jsonl.gz
+          sha256sum dist/geofeed.csv dist/geofeed.csv.gz dist/geofeed.jsonl dist/geofeed.jsonl.gz > dist/SHA256SUMS
+
+      - name: Upload dataset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geofeed-dataset
+          path: |
+            dist/geofeed.csv.gz
+            dist/geofeed.jsonl.gz
+            dist/changelog.md
+            dist/SHA256SUMS
+          retention-days: 30
+
+      - name: Commit small run metadata
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist data/rir.txt
+          mkdir -p runs
+          cp dist/changelog.md runs/latest-changelog.md
+          cp dist/SHA256SUMS runs/latest-SHA256SUMS
+          git add runs/latest-changelog.md runs/latest-SHA256SUMS
           git diff --cached --quiet || git commit -m "Update harvested geofeed dataset"
           git push
