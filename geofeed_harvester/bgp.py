@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+from dataclasses import dataclass
+from typing import Iterable
+
+from geofeed_harvester.models import IPNetwork
+
+
+@dataclass(frozen=True)
+class CymruRoute:
+    asn: str
+    query_ip: str
+    bgp_prefix: IPNetwork | None
+    country: str
+    registry: str
+    allocated: str
+    as_name: str
+
+
+class BgpValidator:
+    """Extension point for ASN-Signal-Graph or RouteSentinel prefix checks."""
+
+    async def validate_prefixes(self, prefixes: Iterable[IPNetwork]) -> dict[IPNetwork, bool | None]:
+        return {prefix: None for prefix in prefixes}
+
+
+class CymruBulkBgpValidator(BgpValidator):
+    """Bulk BGP announcement checks using Team Cymru IP-to-ASN WHOIS service.
+
+    Team Cymru's public guidance is to use one bulk TCP/43 request for groups of
+    addresses instead of many single WHOIS requests. This class batches probe IPs
+    and never performs per-prefix network round trips.
+    """
+
+    def __init__(
+        self,
+        host: str = "whois.cymru.com",
+        port: int = 43,
+        batch_size: int = 2000,
+        timeout: float = 45.0,
+    ):
+        self.host = host
+        self.port = port
+        self.batch_size = batch_size
+        self.timeout = timeout
+
+    async def validate_prefixes(self, prefixes: Iterable[IPNetwork]) -> dict[IPNetwork, bool | None]:
+        unique = list(dict.fromkeys(prefixes))
+        probes = {_probe_ip(prefix): prefix for prefix in unique}
+        routes: dict[str, CymruRoute] = {}
+
+        for batch in _chunks(list(probes), self.batch_size):
+            routes.update(await self._query_batch(batch))
+
+        verdicts: dict[IPNetwork, bool | None] = {}
+        for probe, prefix in probes.items():
+            route = routes.get(probe)
+            if route is None or route.bgp_prefix is None:
+                verdicts[prefix] = False
+            else:
+                verdicts[prefix] = prefix.subnet_of(route.bgp_prefix) or prefix.overlaps(route.bgp_prefix)
+        return verdicts
+
+    async def _query_batch(self, ips: list[str]) -> dict[str, CymruRoute]:
+        if not ips:
+            return {}
+
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(self.host, self.port),
+            timeout=self.timeout,
+        )
+        payload = "\n".join(["begin", "verbose", *ips, "end", ""])
+        writer.write(payload.encode("ascii"))
+        await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+        if writer.can_write_eof():
+            writer.write_eof()
+
+        data = await asyncio.wait_for(reader.read(), timeout=self.timeout)
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:  # noqa: BLE001 - transport close errors do not affect parsed response.
+            pass
+        return parse_cymru_response(data.decode("utf-8", errors="replace"))
+
+
+def parse_cymru_response(text: str) -> dict[str, CymruRoute]:
+    routes: dict[str, CymruRoute] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("Bulk mode") or line.startswith("AS |"):
+            continue
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) < 7:
+            continue
+
+        asn, query_ip, bgp_prefix, country, registry, allocated = parts[:6]
+        as_name = "|".join(parts[6:]).strip()
+        try:
+            parsed_prefix = ipaddress.ip_network(bgp_prefix, strict=False)
+        except ValueError:
+            parsed_prefix = None
+        routes[query_ip] = CymruRoute(
+            asn=asn,
+            query_ip=query_ip,
+            bgp_prefix=parsed_prefix,
+            country=country,
+            registry=registry,
+            allocated=allocated,
+            as_name=as_name,
+        )
+    return routes
+
+
+def _probe_ip(prefix: IPNetwork) -> str:
+    if prefix.version == 4 and prefix.num_addresses > 2:
+        return str(prefix.network_address + 1)
+    return str(prefix.network_address)
+
+
+def _chunks(items: list[str], size: int):
+    for index in range(0, len(items), size):
+        yield items[index : index + size]
