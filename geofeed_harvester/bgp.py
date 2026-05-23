@@ -42,12 +42,14 @@ class CymruBulkBgpValidator(BgpValidator):
         batch_size: int = 500,
         timeout: float = 45.0,
         batch_delay: float = 0.25,
+        max_empty_batches: int = 10,
     ):
         self.host = host
         self.port = port
         self.batch_size = batch_size
         self.timeout = timeout
         self.batch_delay = batch_delay
+        self.max_empty_batches = max_empty_batches
 
     async def validate_prefixes(self, prefixes: Iterable[IPNetwork]) -> dict[IPNetwork, bool | None]:
         unique = list(dict.fromkeys(prefixes))
@@ -57,14 +59,27 @@ class CymruBulkBgpValidator(BgpValidator):
 
         batches = list(_chunks(list(probes), self.batch_size))
         log(f"bgp: Team Cymru checking {len(probes)} probe IPs in {len(batches)} batches")
+        consecutive_empty_batches = 0
         for index, batch in enumerate(batches, start=1):
             if index == 1 or index % 25 == 0 or index == len(batches):
                 log(f"bgp: Team Cymru batch {index}/{len(batches)} size={len(batch)}")
             batch_routes = await self._query_batch(batch)
             if batch_routes is None:
                 unknown_probes.update(batch)
-                log(f"bgp: Team Cymru batch {index}/{len(batches)} returned no usable response")
+                consecutive_empty_batches += 1
+                if consecutive_empty_batches <= 3 or consecutive_empty_batches == self.max_empty_batches:
+                    log(f"bgp: Team Cymru batch {index}/{len(batches)} returned no usable response")
+                if consecutive_empty_batches >= self.max_empty_batches:
+                    remaining = [probe for later_batch in batches[index:] for probe in later_batch]
+                    unknown_probes.update(remaining)
+                    log(
+                        "bgp: Team Cymru circuit breaker opened after "
+                        f"{consecutive_empty_batches} consecutive empty batches; "
+                        f"marking {len(remaining)} remaining probes as unknown"
+                    )
+                    break
             else:
+                consecutive_empty_batches = 0
                 routes.update(batch_routes)
             if self.batch_delay:
                 await asyncio.sleep(self.batch_delay)
@@ -101,7 +116,8 @@ class CymruBulkBgpValidator(BgpValidator):
             data = await asyncio.wait_for(reader.read(), timeout=self.timeout)
             if not data.strip():
                 return None
-            return parse_cymru_response(data.decode("utf-8", errors="replace"))
+            routes = parse_cymru_response(data.decode("utf-8", errors="replace"))
+            return routes or None
         except Exception as exc:  # noqa: BLE001 - BGP confidence must fail open.
             log(f"bgp: Team Cymru request failed: {exc}")
             return None

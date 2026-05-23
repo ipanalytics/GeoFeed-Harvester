@@ -162,7 +162,7 @@ This repository includes a daily workflow:
 It runs:
 
 ```bash
-geofeed-harvester --auto-discover ... --bgp-validator cymru
+geofeed-harvester --auto-discover ...
 ```
 
 and commits:
@@ -181,6 +181,11 @@ dist/changelog.md
 ```
 
 to a rolling `latest` release or to date-stamped releases.
+
+The default workflow does not enable Team Cymru checks because GitHub-hosted
+runners can hit TCP/43 rate limits or empty responses. Run `--bgp-validator
+cymru` manually or from infrastructure with stable egress when BGP confidence
+signals are required.
 
 ## Consuming The Dataset
 
