@@ -1,19 +1,107 @@
 # GeoFeed Harvester
 
-Python batch harvester for RFC 8805 geofeed CSV files discovered from RIR data
-according to RFC 9632.
+Daily first-party IP geolocation from public geofeeds.
 
-The pipeline:
+GeoFeed Harvester discovers RFC 8805 geofeed files from public RIR data,
+downloads them, validates every row, adds provenance, checks BGP visibility in
+bulk, and publishes a clean dataset that can be consumed by GeoForge, MMDB
+builders, fraud systems, routing tools, and research pipelines.
 
-1. Parse bulk/RDAP-style RIR records into `inetnum -> geofeed URL` references.
-2. Keep HTTPS-only geofeed URLs.
-3. Fetch CSV files asynchronously with ETag and Last-Modified cache metadata.
-4. Validate rows against the referring inetnum, RFC 8805 field shape, and ISO-like codes.
-5. Resolve overlaps by preferring the most specific referring inetnum.
-6. Attach provenance and confidence flags.
-7. Publish `CSV` and `JSONL` outputs plus a daily changelog.
+The goal is simple: use operator-published geolocation at the source instead of
+repackaging opaque commercial GeoIP databases.
 
-## Install
+## What It Produces
+
+Every run writes:
+
+```text
+dist/geofeed.csv
+dist/geofeed.jsonl
+dist/changelog.md
+```
+
+`geofeed.csv` is the normalized dataset:
+
+```csv
+prefix,country,region,city,postal_code,rir,inetnum,url,fetched_at,signed,signature_valid,bgp_valid,confidence,flags
+5.23.48.0/24,RU,RU-SPE,Saint Petersburg,,RIPE,0.0.0.0/0,https://example/geofeed.csv,2026-05-23T09:13:26+00:00,false,false,true,0.90,
+```
+
+`geofeed.jsonl` contains the same records as JSON objects, one row per line.
+
+`changelog.md` summarizes row counts, flagged rows, and per-RIR coverage for the
+latest run.
+
+## Downloading The Daily Dataset
+
+If this repository publishes artifacts through GitHub Actions, download the
+latest run from:
+
+```text
+https://github.com/ipanalytics/GeoFeed-Harvester/actions/workflows/harvest.yml
+```
+
+If this repository publishes daily releases, download the latest release assets:
+
+```bash
+curl -L -o geofeed.csv \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv
+
+curl -L -o geofeed.jsonl \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl
+```
+
+For automation, prefer release assets when available because the URL is stable.
+Actions artifacts are useful for inspection, but GitHub expires them according
+to repository retention settings.
+
+## Source Coverage
+
+Automatic discovery currently uses unauthenticated public sources:
+
+| Source | Method | Status |
+| --- | --- | --- |
+| RIPE | public bulk `inetnum` / `inet6num` dumps | enabled |
+| APNIC | public bulk `inetnum` / `inet6num` dumps | enabled |
+| AFRINIC | public bulk database dump | enabled |
+| LACNIC | public Geofeeds Service CSV | enabled |
+| ARIN | authenticated bulk WHOIS or RDAP fallback | not enabled by default |
+
+ARIN bulk WHOIS requires authorization, so it is intentionally not queried as
+part of the unauthenticated daily job. ARIN-style records are supported when
+provided manually or by a future authenticated adapter: `NetRange` is treated as
+`inetnum`, and `Comment` is treated as `remarks`.
+
+## Pipeline
+
+The default production run is bulk-first:
+
+```mermaid
+flowchart LR
+  A["RIR bulk dumps"] --> B["Extract inetnum -> geofeed URL"]
+  C["LACNIC Geofeeds CSV"] --> F["Normalize rows"]
+  B --> D["Fetch HTTPS geofeed CSV"]
+  D --> E["Validate RFC 8805 rows"]
+  E --> G["Team Cymru bulk BGP check"]
+  F --> G
+  G --> H["CSV / JSONL / changelog"]
+```
+
+Validation rules include:
+
+- HTTPS-only geofeed URLs.
+- RFC 8805 CSV parsing.
+- Country code shape validation.
+- Region code shape validation.
+- Drop rows outside the referring `inetnum`.
+- Prefer the most specific referring `inetnum` on overlap.
+- Add provenance: RIR, source URL, referring inetnum, fetch time.
+- Add confidence and conflict flags.
+- Optional Team Cymru bulk BGP visibility checks.
+
+## Running Locally
+
+Install:
 
 ```bash
 python -m venv .venv
@@ -21,9 +109,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-## Run
-
-The normal production run downloads public sources by itself:
+Run the full automatic sequence:
 
 ```bash
 geofeed-harvester \
@@ -37,20 +123,12 @@ geofeed-harvester \
   --bgp-validator cymru
 ```
 
-This sequence is:
+The first run downloads large bulk files. Daily runs reuse cache metadata and
+HTTP validators where available.
 
-1. Download public RIR bulk data from RIPE, APNIC, and AFRINIC.
-2. Extract only inetnum/inet6num records with HTTPS geofeed references.
-3. Download LACNIC's public direct geofeed CSV.
-4. Fetch discovered RFC 8805 CSV files.
-5. Validate and export the final dataset.
-6. Run Team Cymru bulk BGP checks when `--bgp-validator cymru` is enabled.
+## Manual Input Mode
 
-ARIN bulk WHOIS data requires authorization, so ARIN is intentionally not part
-of the unauthenticated automatic source list. Add ARIN-derived records through
-`--rir-dump` or a later authenticated/RDAP fallback stage.
-
-You can also provide newline-delimited RIR records manually:
+You can also provide your own RIR-like records:
 
 ```text
 inetnum: 203.0.113.0/24
@@ -59,64 +137,132 @@ source: RIPE
 
 NetRange: 198.51.100.0 - 198.51.100.255
 Comment: Geofeed https://example.org/geofeed.csv
+source: ARIN
 ```
 
-Then harvest without auto-discovery:
-
-```bash
-geofeed-harvester \
-  --rir-dump data/rir.txt \
-  --out-dir dist \
-  --cache-dir .cache/geofeeds
-```
-
-Enable bulk BGP announcement checks through Team Cymru:
+Then run:
 
 ```bash
 geofeed-harvester \
   --rir-dump data/rir.txt \
   --out-dir dist \
   --cache-dir .cache/geofeeds \
+  --concurrency 32 \
   --bgp-validator cymru
 ```
 
-Outputs:
+## GitHub Actions
 
-- `dist/geofeed.csv`
-- `dist/geofeed.jsonl`
-- `dist/changelog.md`
+This repository includes a daily workflow:
 
-## Standards Notes
+```text
+.github/workflows/harvest.yml
+```
+
+It runs:
+
+```bash
+geofeed-harvester --auto-discover ... --bgp-validator cymru
+```
+
+and commits:
+
+```text
+dist/
+data/rir.txt
+```
+
+To publish stable daily downloads, add a release upload step that attaches:
+
+```text
+dist/geofeed.csv
+dist/geofeed.jsonl
+dist/changelog.md
+```
+
+to a rolling `latest` release or to date-stamped releases.
+
+## Consuming The Dataset
+
+CSV:
+
+```bash
+curl -L -o geofeed.csv \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv
+```
+
+JSONL:
+
+```bash
+curl -L -o geofeed.jsonl \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl
+```
+
+Example Python:
+
+```python
+import csv
+
+with open("geofeed.csv", newline="", encoding="utf-8") as fh:
+    for row in csv.DictReader(fh):
+        if row["bgp_valid"] == "true":
+            print(row["prefix"], row["country"], row["city"])
+```
+
+## Standards
 
 - Geofeed file format: RFC 8805.
-- Discovery mechanism: RFC 9632, replacing RFC 9092.
-- HTTPS geofeed URLs are required.
-- RIPE/APNIC-style data may expose a `geofeed:` attribute.
-- ARIN-style data is handled by treating `NetRange` as `inetnum` and
-  `Comment` as `remarks`.
-- Large-scale collection should use RIR bulk access where available. ARIN bulk
-  access requires authorization, so RDAP enrichment belongs in a dedicated
-  adapter.
+- Discovery mechanism: RFC 9632, which replaced RFC 9092.
+- Large-scale discovery should use RIR bulk data instead of brute-force WHOIS or
+  RDAP scans.
+- RPKI CMS signature verification is delegated to external tooling when enabled.
 
-## Verification Hooks
+## Why Team Cymru
 
-The current implementation ships conservative hooks for production hardening:
+The harvester can use Team Cymru's IP-to-ASN Mapping Service for bulk BGP
+visibility checks. It sends many probe IPs in one TCP/43 bulk WHOIS session
+instead of making thousands of individual WHOIS calls.
 
-- RPKI CMS signature verification can be delegated to `rpki-client`.
-- BGP announcement validation can use Team Cymru bulk WHOIS via
-  `--bgp-validator cymru`, or later ASN-Signal-Graph/RouteSentinel.
-- LACNIC Geofeeds Service can be added as a separate discovery adapter.
-- RDAP fallback should use `RateLimitedRdapClient`, which caches responses and
-  serializes requests per RDAP host.
+This is used only for route visibility/confidence. Team Cymru is not treated as
+a geolocation source.
 
-## Bulk First
+## Trust Model
 
-RDAP must stay a fallback path. The intended production order is:
+This dataset is not a magic truth oracle. It is a normalized view of
+operator-published geofeed data with explicit provenance.
 
-1. RIR bulk dumps for geofeed discovery.
-2. Team Cymru bulk WHOIS for BGP origin/prefix validation.
-3. RDAP only for missing ARIN or malformed bulk records, with per-host pacing.
+Useful confidence signals:
 
-Team Cymru's IP-to-ASN service supports WHOIS bulk mode over TCP/43 with
-`begin`, `verbose`, query lines, and `end`. Keep batches to a few thousand
-addresses and avoid large volumes of individual WHOIS requests.
+- The row came from a public RIR-discovered geofeed.
+- The prefix is inside the referring inetnum.
+- The prefix is visible in BGP.
+- The row has no schema or overlap flags.
+- Future signature validation can confirm signed geofeeds.
+
+Rows with flags are retained because they are useful for debugging and research,
+but consumers can filter them out.
+
+## Development
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Compile check:
+
+```bash
+python -m compileall geofeed_harvester tests
+```
+
+## Status
+
+This is an early harvester implementation. The core pipeline works, but the next
+valuable additions are:
+
+- authenticated ARIN bulk adapter;
+- conservative RDAP fallback for missing ARIN records;
+- signed geofeed CMS verification through `rpki-client`;
+- Parquet output;
+- date-stamped GitHub release publishing.
