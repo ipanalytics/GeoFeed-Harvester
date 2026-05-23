@@ -7,6 +7,7 @@ from pathlib import Path
 
 import httpx
 
+from geofeed_harvester.logging import log
 from geofeed_harvester.models import RawGeofeedRow
 
 USER_AGENT = "GeoFeed-Harvester/0.1 (+https://github.com/)"
@@ -52,16 +53,22 @@ def prepare_inputs(
     records = 0
     with normalized_rir_path.open("w", encoding="utf-8") as output:
         for source in RPSL_BULK_SOURCES:
+            log(f"bulk: downloading {source.name} from {source.url}")
             archive_path = raw_dir / f"{source.name}.gz"
             _download(source.url, archive_path)
-            records += _write_matching_records(archive_path, output)
+            log(f"bulk: extracting geofeed records from {source.name}")
+            source_records = _write_matching_records(archive_path, output)
+            records += source_records
+            log(f"bulk: {source.name} yielded {source_records} geofeed records")
 
     direct_files = 0
     if include_lacnic:
         for source in DIRECT_GEOFEED_SOURCES:
+            log(f"direct: downloading {source.name} from {source.url}")
             target = direct_geofeed_dir / f"{source.name}.csv"
             _download(source.url, target)
             direct_files += 1
+            log(f"direct: downloaded {source.name}")
 
     return {
         "bulk_sources": len(RPSL_BULK_SOURCES),
@@ -122,10 +129,20 @@ def _download(url: str, target: Path) -> None:
         if response.status_code == 304:
             return
         response.raise_for_status()
+        total = response.headers.get("content-length")
+        if total:
+            log(f"download: {url} content-length={total} bytes")
+        downloaded = 0
+        next_report = 50 * 1024 * 1024
         with tmp.open("wb") as fh:
             for chunk in response.iter_bytes():
                 fh.write(chunk)
+                downloaded += len(chunk)
+                if downloaded >= next_report:
+                    log(f"download: {url} downloaded={downloaded} bytes")
+                    next_report += 50 * 1024 * 1024
     tmp.replace(target)
+    log(f"download: saved {target}")
     meta.write_text(
         "\n".join(
             [
@@ -142,7 +159,11 @@ def _write_matching_records(archive_path: Path, output) -> int:
     count = 0
     record: list[str] = []
     with gzip.open(archive_path, "rt", encoding="utf-8", errors="replace") as fh:
+        lines = 0
         for line in fh:
+            lines += 1
+            if lines % 1_000_000 == 0:
+                log(f"bulk: scanned {lines} lines in {archive_path.name}, matches={count}")
             if line.strip():
                 record.append(line.rstrip("\n"))
                 continue

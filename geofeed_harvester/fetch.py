@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from geofeed_harvester.logging import log
 from geofeed_harvester.models import InetnumRef, RawGeofeedRow
 
 
@@ -78,8 +79,18 @@ async def fetch_all(
         limits=limits,
         headers=headers,
     ) as client:
-        tasks = [_fetch_one(client, cache, ref, semaphore, timeout) for ref in refs]
-        return list(await asyncio.gather(*tasks))
+        materialized_refs = list(refs)
+        log(f"fetch: starting {len(materialized_refs)} geofeed URL fetches")
+        tasks = [_fetch_one(client, cache, ref, semaphore, timeout) for ref in materialized_refs]
+        results: list[FetchResult] = []
+        for index, task in enumerate(asyncio.as_completed(tasks), start=1):
+            result = await task
+            results.append(result)
+            if index % 100 == 0 or index == len(tasks):
+                failed = sum(1 for item in results if item.status == "failed")
+                rows = sum(len(item.rows) for item in results)
+                log(f"fetch: completed={index}/{len(tasks)} failed={failed} rows={rows}")
+        return results
 
 
 async def _fetch_one(

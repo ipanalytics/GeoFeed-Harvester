@@ -5,6 +5,7 @@ import ipaddress
 from dataclasses import dataclass
 from typing import Iterable
 
+from geofeed_harvester.logging import log
 from geofeed_harvester.models import IPNetwork
 
 
@@ -51,8 +52,12 @@ class CymruBulkBgpValidator(BgpValidator):
         probes = {_probe_ip(prefix): prefix for prefix in unique}
         routes: dict[str, CymruRoute] = {}
 
-        for batch in _chunks(list(probes), self.batch_size):
+        batches = list(_chunks(list(probes), self.batch_size))
+        log(f"bgp: Team Cymru checking {len(probes)} probe IPs in {len(batches)} batches")
+        for index, batch in enumerate(batches, start=1):
+            log(f"bgp: Team Cymru batch {index}/{len(batches)} size={len(batch)}")
             routes.update(await self._query_batch(batch))
+        log(f"bgp: Team Cymru returned {len(routes)} routes")
 
         verdicts: dict[IPNetwork, bool | None] = {}
         for probe, prefix in probes.items():
