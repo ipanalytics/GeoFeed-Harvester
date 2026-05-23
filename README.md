@@ -10,6 +10,23 @@ builders, fraud systems, routing tools, and research pipelines.
 The goal is simple: use operator-published geolocation at the source instead of
 repackaging opaque commercial GeoIP databases.
 
+<!-- GEOFEED_STATS_START -->
+## Latest Run
+
+- Generated at: `not published yet`
+- Valid rows: `pending`
+- Raw rows: `pending`
+- Unique prefixes: `pending`
+- Unique geofeed URLs: `pending`
+- Countries: `pending`
+- Failed geofeed fetches: `pending`
+- Added / removed / changed prefixes: `pending`
+- CSV gzip size: `pending`
+- JSONL gzip size: `pending`
+- Parquet size: `pending`
+
+<!-- GEOFEED_STATS_END -->
+
 ## What It Produces
 
 Every run writes:
