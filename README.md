@@ -20,6 +20,16 @@ dist/geofeed.jsonl
 dist/changelog.md
 ```
 
+The GitHub workflow uploads compressed artifacts because the full JSONL dataset
+is larger than GitHub's normal per-file git limit:
+
+```text
+geofeed.csv.gz
+geofeed.jsonl.gz
+changelog.md
+SHA256SUMS
+```
+
 `geofeed.csv` is the normalized dataset:
 
 ```csv
@@ -54,6 +64,13 @@ curl -L -o geofeed.jsonl \
 For automation, prefer release assets when available because the URL is stable.
 Actions artifacts are useful for inspection, but GitHub expires them according
 to repository retention settings.
+
+The repository also keeps small metadata files in git:
+
+```text
+runs/latest-changelog.md
+runs/latest-SHA256SUMS
+```
 
 ## Source Coverage
 
@@ -168,9 +185,12 @@ geofeed-harvester --auto-discover ...
 and commits:
 
 ```text
-dist/
-data/rir.txt
+runs/latest-changelog.md
+runs/latest-SHA256SUMS
 ```
+
+Large datasets are uploaded as compressed workflow artifacts instead of being
+committed to git.
 
 To publish stable daily downloads, add a release upload step that attaches:
 
