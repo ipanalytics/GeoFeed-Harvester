@@ -23,7 +23,34 @@ pip install -e ".[dev]"
 
 ## Run
 
-Create newline-delimited RIR records in text form:
+The normal production run downloads public sources by itself:
+
+```bash
+geofeed-harvester \
+  --auto-discover \
+  --out-dir dist \
+  --cache-dir .cache/geofeeds \
+  --bulk-dir .cache/rir-bulk \
+  --direct-geofeed-dir .cache/direct-geofeeds \
+  --normalized-rir-dump data/rir.txt \
+  --concurrency 32 \
+  --bgp-validator cymru
+```
+
+This sequence is:
+
+1. Download public RIR bulk data from RIPE, APNIC, and AFRINIC.
+2. Extract only inetnum/inet6num records with HTTPS geofeed references.
+3. Download LACNIC's public direct geofeed CSV.
+4. Fetch discovered RFC 8805 CSV files.
+5. Validate and export the final dataset.
+6. Run Team Cymru bulk BGP checks when `--bgp-validator cymru` is enabled.
+
+ARIN bulk WHOIS data requires authorization, so ARIN is intentionally not part
+of the unauthenticated automatic source list. Add ARIN-derived records through
+`--rir-dump` or a later authenticated/RDAP fallback stage.
+
+You can also provide newline-delimited RIR records manually:
 
 ```text
 inetnum: 203.0.113.0/24
@@ -34,7 +61,7 @@ NetRange: 198.51.100.0 - 198.51.100.255
 Comment: Geofeed https://example.org/geofeed.csv
 ```
 
-Then harvest:
+Then harvest without auto-discovery:
 
 ```bash
 geofeed-harvester \

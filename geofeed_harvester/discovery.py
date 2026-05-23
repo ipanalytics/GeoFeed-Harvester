@@ -32,8 +32,9 @@ def parse_rir_record(
         values.setdefault(key.strip().lower(), []).append(value.strip())
 
     rir = _first(values, RIR_KEYS) or default_rir
-    inetnums = [_parse_network(v) for key in INETNUM_KEYS for v in values.get(key, [])]
-    inetnums = [n for n in inetnums if n is not None]
+    inetnums = [
+        network for key in INETNUM_KEYS for v in values.get(key, []) for network in _parse_networks(v)
+    ]
     urls = {
         url.rstrip(".,;")
         for key in TEXT_KEYS
@@ -78,22 +79,21 @@ def _first(values: dict[str, list[str]], keys: set[str]) -> str | None:
     return None
 
 
-def _parse_network(value: str):
+def _parse_networks(value: str):
     value = value.strip()
     if " - " in value:
         start, end = [part.strip() for part in value.split(" - ", 1)]
         return _range_to_network(start, end)
     try:
-        return ipaddress.ip_network(value, strict=False)
+        return [ipaddress.ip_network(value, strict=False)]
     except ValueError:
-        return None
+        return []
 
 
 def _range_to_network(start: str, end: str):
     try:
-        networks = list(ipaddress.summarize_address_range(ipaddress.ip_address(start), ipaddress.ip_address(end)))
+        return list(
+            ipaddress.summarize_address_range(ipaddress.ip_address(start), ipaddress.ip_address(end))
+        )
     except ValueError:
-        return None
-    if len(networks) == 1:
-        return networks[0]
-    return None
+        return []
