@@ -51,14 +51,15 @@ latest run from:
 https://github.com/ipanalytics/GeoFeed-Harvester/actions/workflows/harvest.yml
 ```
 
-If this repository publishes daily releases, download the latest release assets:
+The daily workflow also publishes a rolling `latest` release. Download the
+latest release assets:
 
 ```bash
-curl -L -o geofeed.csv \
-  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv
+curl -L -o geofeed.csv.gz \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv.gz
 
-curl -L -o geofeed.jsonl \
-  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl
+curl -L -o geofeed.jsonl.gz \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl.gz
 ```
 
 For automation, prefer release assets when available because the URL is stable.
@@ -192,15 +193,16 @@ runs/latest-SHA256SUMS
 Large datasets are uploaded as compressed workflow artifacts instead of being
 committed to git.
 
-To publish stable daily downloads, add a release upload step that attaches:
+The workflow publishes stable daily downloads by attaching:
 
 ```text
-dist/geofeed.csv
-dist/geofeed.jsonl
+dist/geofeed.csv.gz
+dist/geofeed.jsonl.gz
 dist/changelog.md
+dist/SHA256SUMS
 ```
 
-to a rolling `latest` release or to date-stamped releases.
+to a rolling `latest` release.
 
 The default workflow does not enable Team Cymru checks because GitHub-hosted
 runners can hit TCP/43 rate limits or empty responses. Run `--bgp-validator
@@ -212,15 +214,15 @@ signals are required.
 CSV:
 
 ```bash
-curl -L -o geofeed.csv \
-  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv
+curl -L -o geofeed.csv.gz \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.csv.gz
 ```
 
 JSONL:
 
 ```bash
-curl -L -o geofeed.jsonl \
-  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl
+curl -L -o geofeed.jsonl.gz \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl.gz
 ```
 
 Example Python:
