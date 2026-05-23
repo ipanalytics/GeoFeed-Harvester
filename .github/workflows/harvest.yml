@@ -127,7 +127,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git stash push --include-untracked -- README.md || true
           git pull --rebase origin main
+          git stash pop || true
           mkdir -p runs
           cp dist/changelog.md runs/latest-changelog.md
           cp dist/manifest.json runs/latest-manifest.json
