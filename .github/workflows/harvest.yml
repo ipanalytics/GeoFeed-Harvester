@@ -97,23 +97,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --tags
-          git tag -f latest "$GITHUB_SHA"
-          git push origin latest --force
+          RELEASE_DATE="$(date -u +%Y-%m-%d)"
+          RELEASE_TAG="dataset-${RELEASE_DATE}"
+          RELEASE_TITLE="GeoFeed Dataset ${RELEASE_DATE}"
 
-          if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest \
-              --title "Latest GeoFeed Dataset" \
+          git fetch --tags
+          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "$RELEASE_TAG" --force
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
               --notes-file dist/changelog.md \
               --latest
           else
-            gh release create latest \
-              --title "Latest GeoFeed Dataset" \
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
               --notes-file dist/changelog.md \
               --latest
           fi
 
-          gh release upload latest \
+          gh release upload "$RELEASE_TAG" \
             dist/geofeed.csv.gz \
             dist/geofeed.jsonl.gz \
             dist/geofeed.parquet \
