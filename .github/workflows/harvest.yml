@@ -44,8 +44,7 @@ jobs:
             --bulk-dir .cache/rir-bulk \
             --direct-geofeed-dir .cache/direct-geofeeds \
             --normalized-rir-dump data/rir.txt \
-            --concurrency 32 \
-            --bgp-validator cymru
+            --concurrency 32
 
       - name: Commit published dataset
         run: |
