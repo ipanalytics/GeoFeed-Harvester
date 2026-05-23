@@ -64,6 +64,7 @@ jobs:
         run: |
           gzip -9 -c dist/geofeed.csv > dist/geofeed.csv.gz
           gzip -9 -c dist/geofeed.jsonl > dist/geofeed.jsonl.gz
+          python scripts/finalize_manifest.py
           sha256sum \
             dist/geofeed.csv.gz \
             dist/geofeed.jsonl.gz \
