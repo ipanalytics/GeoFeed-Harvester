@@ -39,28 +39,42 @@ class CymruBulkBgpValidator(BgpValidator):
         self,
         host: str = "whois.cymru.com",
         port: int = 43,
-        batch_size: int = 2000,
+        batch_size: int = 500,
         timeout: float = 45.0,
+        batch_delay: float = 0.25,
     ):
         self.host = host
         self.port = port
         self.batch_size = batch_size
         self.timeout = timeout
+        self.batch_delay = batch_delay
 
     async def validate_prefixes(self, prefixes: Iterable[IPNetwork]) -> dict[IPNetwork, bool | None]:
         unique = list(dict.fromkeys(prefixes))
         probes = {_probe_ip(prefix): prefix for prefix in unique}
         routes: dict[str, CymruRoute] = {}
+        unknown_probes: set[str] = set()
 
         batches = list(_chunks(list(probes), self.batch_size))
         log(f"bgp: Team Cymru checking {len(probes)} probe IPs in {len(batches)} batches")
         for index, batch in enumerate(batches, start=1):
-            log(f"bgp: Team Cymru batch {index}/{len(batches)} size={len(batch)}")
-            routes.update(await self._query_batch(batch))
+            if index == 1 or index % 25 == 0 or index == len(batches):
+                log(f"bgp: Team Cymru batch {index}/{len(batches)} size={len(batch)}")
+            batch_routes = await self._query_batch(batch)
+            if batch_routes is None:
+                unknown_probes.update(batch)
+                log(f"bgp: Team Cymru batch {index}/{len(batches)} returned no usable response")
+            else:
+                routes.update(batch_routes)
+            if self.batch_delay:
+                await asyncio.sleep(self.batch_delay)
         log(f"bgp: Team Cymru returned {len(routes)} routes")
 
         verdicts: dict[IPNetwork, bool | None] = {}
         for probe, prefix in probes.items():
+            if probe in unknown_probes:
+                verdicts[prefix] = None
+                continue
             route = routes.get(probe)
             if route is None or route.bgp_prefix is None:
                 verdicts[prefix] = False
@@ -68,27 +82,36 @@ class CymruBulkBgpValidator(BgpValidator):
                 verdicts[prefix] = prefix.subnet_of(route.bgp_prefix) or prefix.overlaps(route.bgp_prefix)
         return verdicts
 
-    async def _query_batch(self, ips: list[str]) -> dict[str, CymruRoute]:
+    async def _query_batch(self, ips: list[str]) -> dict[str, CymruRoute] | None:
         if not ips:
             return {}
 
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(self.host, self.port),
-            timeout=self.timeout,
-        )
-        payload = "\n".join(["begin", "verbose", *ips, "end", ""])
-        writer.write(payload.encode("ascii"))
-        await asyncio.wait_for(writer.drain(), timeout=self.timeout)
-        if writer.can_write_eof():
-            writer.write_eof()
-
-        data = await asyncio.wait_for(reader.read(), timeout=self.timeout)
-        writer.close()
+        writer = None
         try:
-            await writer.wait_closed()
-        except Exception:  # noqa: BLE001 - transport close errors do not affect parsed response.
-            pass
-        return parse_cymru_response(data.decode("utf-8", errors="replace"))
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port),
+                timeout=self.timeout,
+            )
+            payload = "\n".join(["begin", "verbose", *ips, "end", ""])
+            writer.write(payload.encode("ascii"))
+            await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+            if writer.can_write_eof():
+                writer.write_eof()
+
+            data = await asyncio.wait_for(reader.read(), timeout=self.timeout)
+            if not data.strip():
+                return None
+            return parse_cymru_response(data.decode("utf-8", errors="replace"))
+        except Exception as exc:  # noqa: BLE001 - BGP confidence must fail open.
+            log(f"bgp: Team Cymru request failed: {exc}")
+            return None
+        finally:
+            if writer is not None:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:  # noqa: BLE001 - transport close errors do not affect parsed response.
+                    pass
 
 
 def parse_cymru_response(text: str) -> dict[str, CymruRoute]:
