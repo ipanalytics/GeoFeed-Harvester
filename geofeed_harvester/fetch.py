@@ -4,6 +4,7 @@ import asyncio
 import csv
 import hashlib
 import ipaddress
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,7 +18,8 @@ from geofeed_harvester.models import InetnumRef, RawGeofeedRow
 
 @dataclass(frozen=True)
 class FetchResult:
-    ref: InetnumRef
+    url: str
+    refs: tuple[InetnumRef, ...]
     rows: tuple[RawGeofeedRow, ...]
     fetched_at: str
     status: str
@@ -73,15 +75,20 @@ async def fetch_all(
     limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
     semaphore = asyncio.Semaphore(concurrency)
     headers = {"User-Agent": "GeoFeed-Harvester/0.1 (+https://github.com/)"}
+    refs_by_url: dict[str, list[InetnumRef]] = defaultdict(list)
+    for ref in refs:
+        refs_by_url[ref.url].append(ref)
+
     async with httpx.AsyncClient(
         http2=True,
         follow_redirects=True,
         limits=limits,
         headers=headers,
     ) as client:
-        materialized_refs = list(refs)
-        log(f"fetch: starting {len(materialized_refs)} geofeed URL fetches")
-        tasks = [_fetch_one(client, cache, ref, semaphore, timeout) for ref in materialized_refs]
+        groups = [(url, tuple(group_refs)) for url, group_refs in refs_by_url.items()]
+        ref_count = sum(len(group_refs) for _, group_refs in groups)
+        log(f"fetch: starting {len(groups)} unique geofeed URL fetches for {ref_count} inetnum refs")
+        tasks = [_fetch_one(client, cache, url, group_refs, semaphore, timeout) for url, group_refs in groups]
         results: list[FetchResult] = []
         for index, task in enumerate(asyncio.as_completed(tasks), start=1):
             result = await task
@@ -96,30 +103,31 @@ async def fetch_all(
 async def _fetch_one(
     client: httpx.AsyncClient,
     cache: HttpCache,
-    ref: InetnumRef,
+    url: str,
+    refs: tuple[InetnumRef, ...],
     semaphore: asyncio.Semaphore,
     timeout: float,
 ) -> FetchResult:
     fetched_at = datetime.now(UTC).isoformat(timespec="seconds")
-    if not ref.url.lower().startswith("https://"):
-        return FetchResult(ref, (), fetched_at, "failed", "non_https_url")
+    if not url.lower().startswith("https://"):
+        return FetchResult(url, refs, (), fetched_at, "failed", "non_https_url")
 
     async with semaphore:
         try:
-            response = await client.get(ref.url, headers=cache.headers_for(ref.url), timeout=timeout)
+            response = await client.get(url, headers=cache.headers_for(url), timeout=timeout)
             if response.status_code == 304:
-                cached = cache.body_for(ref.url)
+                cached = cache.body_for(url)
                 if cached is None:
-                    return FetchResult(ref, (), fetched_at, "failed", "not_modified_without_cache")
-                return FetchResult(ref, tuple(_parse_csv(ref, cached)), fetched_at, "not_modified")
+                    return FetchResult(url, refs, (), fetched_at, "failed", "not_modified_without_cache")
+                return FetchResult(url, refs, tuple(_parse_csv(refs, url, cached)), fetched_at, "not_modified")
             response.raise_for_status()
-            cache.store(ref.url, response)
-            return FetchResult(ref, tuple(_parse_csv(ref, response.text)), fetched_at, "fetched")
+            cache.store(url, response)
+            return FetchResult(url, refs, tuple(_parse_csv(refs, url, response.text)), fetched_at, "fetched")
         except Exception as exc:  # noqa: BLE001 - provenance should retain fetch failure detail.
-            return FetchResult(ref, (), fetched_at, "failed", str(exc))
+            return FetchResult(url, refs, (), fetched_at, "failed", str(exc))
 
 
-def _parse_csv(ref: InetnumRef, text: str) -> list[RawGeofeedRow]:
+def _parse_csv(refs: tuple[InetnumRef, ...], url: str, text: str) -> list[RawGeofeedRow]:
     rows: list[RawGeofeedRow] = []
     reader = csv.reader(text.splitlines())
     for row in reader:
@@ -131,18 +139,21 @@ def _parse_csv(ref: InetnumRef, text: str) -> list[RawGeofeedRow]:
             prefix = ipaddress.ip_network(prefix_raw, strict=False)
         except ValueError:
             continue
-        rows.append(
-            RawGeofeedRow(
-                prefix=prefix,
-                country=country.upper(),
-                region=region,
-                city=city,
-                postal_code=postal_code,
-                url=ref.url,
-                inetnum=ref.inetnum,
-                rir=ref.rir,
+        for ref in refs:
+            if prefix.version != ref.inetnum.version or not prefix.subnet_of(ref.inetnum):
+                continue
+            rows.append(
+                RawGeofeedRow(
+                    prefix=prefix,
+                    country=country.upper(),
+                    region=region,
+                    city=city,
+                    postal_code=postal_code,
+                    url=url,
+                    inetnum=ref.inetnum,
+                    rir=ref.rir,
+                )
             )
-        )
     return rows
 
 

@@ -29,7 +29,7 @@ async def run_harvest(
 
     results = await fetch_all(refs, HttpCache(cache_dir), concurrency=concurrency)
     raw_rows = [row for result in results for row in result.rows]
-    fetched_at_by_url = {result.ref.url: result.fetched_at for result in results}
+    fetched_at_by_url = {result.url: result.fetched_at for result in results}
 
     direct_rows = []
     for rir, url, path in direct_geofeed_paths or []:
