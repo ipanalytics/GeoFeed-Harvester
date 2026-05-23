@@ -73,6 +73,10 @@ jobs:
             dist/manifest.json \
             dist/changelog.md > dist/SHA256SUMS
 
+      - name: Update README stats
+        run: |
+          python scripts/update_readme_stats.py
+
       - name: Upload dataset artifact
         uses: actions/upload-artifact@v4
         with:
@@ -123,10 +127,20 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
           mkdir -p runs
           cp dist/changelog.md runs/latest-changelog.md
           cp dist/manifest.json runs/latest-manifest.json
           cp dist/SHA256SUMS runs/latest-SHA256SUMS
-          git add runs/latest-changelog.md runs/latest-manifest.json runs/latest-SHA256SUMS
-          git diff --cached --quiet || git commit -m "Update harvested geofeed dataset"
-          git push
+          git add README.md runs/latest-changelog.md runs/latest-manifest.json runs/latest-SHA256SUMS
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update harvested geofeed dataset"
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              exit 0
+            fi
+            git pull --rebase origin main
+          done
+          git push origin main
