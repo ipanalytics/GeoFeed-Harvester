@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from itertools import groupby
 
+from geofeed_harvester.iso import valid_country, valid_region
 from geofeed_harvester.models import RawGeofeedRow, ValidatedGeofeedRow
-
-COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
-REGION_RE = re.compile(r"^$|^[A-Z]{2}-[A-Z0-9]{1,3}$")
 
 
 def validate_rows(
     rows: Iterable[RawGeofeedRow],
     fetched_at_by_url: dict[str, str],
     bgp_verdicts: dict[object, bool | None] | None = None,
+    signature_verdicts: dict[str, bool] | None = None,
 ) -> list[ValidatedGeofeedRow]:
     bgp_verdicts = bgp_verdicts or {}
+    signature_verdicts = signature_verdicts or {}
     candidates: list[ValidatedGeofeedRow] = []
     for row in rows:
         flags: list[str] = []
@@ -23,9 +22,9 @@ def validate_rows(
             flags.append("ip_version_mismatch")
         elif not row.prefix.subnet_of(row.inetnum):
             flags.append("outside_inetnum")
-        if not COUNTRY_RE.fullmatch(row.country):
+        if not valid_country(row.country):
             flags.append("invalid_country")
-        if row.region and not REGION_RE.fullmatch(row.region.upper()):
+        if row.region and not valid_region(row.region.upper()):
             flags.append("invalid_region")
 
         if "outside_inetnum" in flags or "ip_version_mismatch" in flags:
@@ -40,6 +39,13 @@ def validate_rows(
         elif bgp_valid is False:
             flags.append("bgp_not_announced")
             confidence -= 0.2
+        signed = row.url in signature_verdicts
+        signature_valid = bool(signature_verdicts.get(row.url, False))
+        if signature_valid:
+            confidence += 0.1
+        elif signed:
+            flags.append("invalid_signature")
+            confidence -= 0.25
 
         candidates.append(
             ValidatedGeofeedRow(
@@ -52,6 +58,8 @@ def validate_rows(
                 rir=row.rir,
                 inetnum=row.inetnum,
                 fetched_at=fetched_at_by_url.get(row.url, ""),
+                signed=signed,
+                signature_valid=signature_valid,
                 bgp_valid=bgp_valid,
                 confidence=confidence,
                 flags=tuple(flags),

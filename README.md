@@ -26,6 +26,10 @@ is larger than GitHub's normal per-file git limit:
 ```text
 geofeed.csv.gz
 geofeed.jsonl.gz
+geofeed.parquet
+failed-geofeeds.csv
+diff.json
+manifest.json
 changelog.md
 SHA256SUMS
 ```
@@ -60,6 +64,12 @@ curl -L -o geofeed.csv.gz \
 
 curl -L -o geofeed.jsonl.gz \
   https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl.gz
+
+curl -L -o geofeed.parquet \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.parquet
+
+curl -L -o manifest.json \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/manifest.json
 ```
 
 For automation, prefer release assets when available because the URL is stable.
@@ -70,6 +80,7 @@ The repository also keeps small metadata files in git:
 
 ```text
 runs/latest-changelog.md
+runs/latest-manifest.json
 runs/latest-SHA256SUMS
 ```
 
@@ -115,6 +126,8 @@ Validation rules include:
 - Prefer the most specific referring `inetnum` on overlap.
 - Add provenance: RIR, source URL, referring inetnum, fetch time.
 - Add confidence and conflict flags.
+- Validate ISO-3166 country and ISO-3166-2 subdivision codes when the optional
+  `pycountry` catalog is available.
 - Optional Team Cymru bulk BGP visibility checks.
 
 ## Running Locally
@@ -143,6 +156,30 @@ geofeed-harvester \
 
 The first run downloads large bulk files. Daily runs reuse cache metadata and
 HTTP validators where available.
+
+Optional production enrichments:
+
+```bash
+geofeed-harvester \
+  --auto-discover \
+  --arin-rdap-seed data/arin-rdap-seeds.txt \
+  --arin-rdap-max-queries 100 \
+  --signature-verdicts data/signature-verdicts.json
+```
+
+`--arin-rdap-seed` is intentionally seed-based. It does not scan ARIN address
+space; it only enriches explicit IPs or prefixes listed by the operator.
+
+`--signature-verdicts` accepts JSON produced by an external CMS/RPKI verifier,
+for example:
+
+```json
+{
+  "https://example.net/geofeed.csv": {
+    "signature_valid": true
+  }
+}
+```
 
 ## Manual Input Mode
 
@@ -198,6 +235,10 @@ The workflow publishes stable daily downloads by attaching:
 ```text
 dist/geofeed.csv.gz
 dist/geofeed.jsonl.gz
+dist/geofeed.parquet
+dist/failed-geofeeds.csv
+dist/diff.json
+dist/manifest.json
 dist/changelog.md
 dist/SHA256SUMS
 ```
@@ -223,6 +264,23 @@ JSONL:
 ```bash
 curl -L -o geofeed.jsonl.gz \
   https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.jsonl.gz
+```
+
+Parquet:
+
+```bash
+curl -L -o geofeed.parquet \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/geofeed.parquet
+```
+
+Metadata and daily diff:
+
+```bash
+curl -L -o manifest.json \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/manifest.json
+
+curl -L -o diff.json \
+  https://github.com/ipanalytics/GeoFeed-Harvester/releases/latest/download/diff.json
 ```
 
 Example Python:
@@ -289,7 +347,6 @@ This is an early harvester implementation. The core pipeline works, but the next
 valuable additions are:
 
 - authenticated ARIN bulk adapter;
-- conservative RDAP fallback for missing ARIN records;
-- signed geofeed CMS verification through `rpki-client`;
-- Parquet output;
-- date-stamped GitHub release publishing.
+- first-class CMS signature discovery for signed geofeeds;
+- date-stamped GitHub release publishing in addition to the rolling `latest`
+  release.

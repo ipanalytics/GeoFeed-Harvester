@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import UTC, datetime
+import json
 
 from geofeed_harvester.bgp import BgpValidator, CymruBulkBgpValidator
 from geofeed_harvester.discovery import dedupe_refs, parse_rir_dump
@@ -19,6 +20,8 @@ async def run_harvest(
     concurrency: int = 32,
     bgp_validator: str = "none",
     direct_geofeed_paths: list[tuple[str, str, Path]] | None = None,
+    previous_jsonl: Path | None = None,
+    signature_verdicts_path: Path | None = None,
 ) -> dict[str, int]:
     refs = []
     for path in rir_dump_paths:
@@ -50,12 +53,15 @@ async def run_harvest(
         bgp_verdicts = await validator.validate_prefixes(row.prefix for row in raw_rows)
 
     log("pipeline: validating rows")
-    validated = validate_rows(raw_rows, fetched_at_by_url, bgp_verdicts=bgp_verdicts)
+    signature_verdicts = _load_signature_verdicts(signature_verdicts_path)
+    validated = validate_rows(
+        raw_rows,
+        fetched_at_by_url,
+        bgp_verdicts=bgp_verdicts,
+        signature_verdicts=signature_verdicts,
+    )
     log(f"pipeline: validated rows={len(validated)}")
-    log(f"pipeline: writing outputs to {out_dir}")
-    write_outputs(validated, out_dir)
-
-    return {
+    stats = {
         "refs": len(refs),
         "fetches": len(results),
         "failed_fetches": sum(1 for result in results if result.status == "failed"),
@@ -63,4 +69,28 @@ async def run_harvest(
         "direct_rows": len(direct_rows),
         "valid_rows": len(validated),
         "bgp_checked": len(bgp_verdicts),
+        "signature_checked_urls": len(signature_verdicts),
     }
+    log(f"pipeline: writing outputs to {out_dir}")
+    write_outputs(
+        validated,
+        out_dir,
+        stats=stats,
+        fetch_results=results,
+        previous_jsonl=previous_jsonl,
+    )
+
+    return stats
+
+
+def _load_signature_verdicts(path: Path | None) -> dict[str, bool]:
+    if path is None or not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    verdicts: dict[str, bool] = {}
+    for url, value in payload.items():
+        if isinstance(value, bool):
+            verdicts[url] = value
+        elif isinstance(value, dict):
+            verdicts[url] = bool(value.get("signature_valid", value.get("valid", False)))
+    return verdicts

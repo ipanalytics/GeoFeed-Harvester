@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from geofeed_harvester.pipeline import run_harvest
+from geofeed_harvester.rdap import discover_arin_rdap_refs
 from geofeed_harvester.sources import DIRECT_GEOFEED_SOURCES, prepare_inputs
 
 
@@ -32,6 +33,15 @@ def main() -> None:
     )
     parser.add_argument("--out-dir", type=Path, default=Path("dist"))
     parser.add_argument("--cache-dir", type=Path, default=Path(".cache/geofeeds"))
+    parser.add_argument("--rdap-cache-dir", type=Path, default=Path(".cache/rdap"))
+    parser.add_argument("--previous-jsonl", type=Path)
+    parser.add_argument(
+        "--signature-verdicts",
+        type=Path,
+        help="Optional JSON mapping geofeed URL to CMS/RPKI signature validity.",
+    )
+    parser.add_argument("--arin-rdap-seed", type=Path)
+    parser.add_argument("--arin-rdap-max-queries", type=int, default=100)
     parser.add_argument("--concurrency", type=int, default=32)
     parser.add_argument(
         "--bgp-validator",
@@ -58,6 +68,25 @@ def main() -> None:
                     (source.rir, source.url, args.direct_geofeed_dir / f"{source.name}.csv")
                 )
 
+    arin_refs_path = None
+    if args.arin_rdap_seed:
+        arin_refs = asyncio.run(
+            discover_arin_rdap_refs(
+                args.arin_rdap_seed,
+                cache_dir=args.rdap_cache_dir,
+                max_queries=args.arin_rdap_max_queries,
+            )
+        )
+        if arin_refs:
+            arin_refs_path = args.rdap_cache_dir / "arin-rdap-geofeeds.txt"
+            arin_refs_path.parent.mkdir(parents=True, exist_ok=True)
+            with arin_refs_path.open("w", encoding="utf-8") as fh:
+                for ref in arin_refs:
+                    fh.write(f"inetnum: {ref.inetnum}\n")
+                    fh.write(f"remarks: {ref.url}\n")
+                    fh.write("source: ARIN\n\n")
+            rir_dumps.append(arin_refs_path)
+
     if not rir_dumps and not direct_geofeeds:
         parser.error("pass --rir-dump or use --auto-discover")
 
@@ -69,6 +98,8 @@ def main() -> None:
             concurrency=args.concurrency,
             bgp_validator=args.bgp_validator,
             direct_geofeed_paths=direct_geofeeds,
+            previous_jsonl=args.previous_jsonl,
+            signature_verdicts_path=args.signature_verdicts,
         )
     )
     stats = {**input_stats, **stats}
