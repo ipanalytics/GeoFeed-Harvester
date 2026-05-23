@@ -32,9 +32,21 @@ jobs:
             .cache/geofeeds
             .cache/rir-bulk
             .cache/direct-geofeeds
+            .cache/rdap
           key: geofeed-harvester-${{ github.run_id }}
           restore-keys: |
             geofeed-harvester-
+
+      - name: Download previous dataset
+        run: |
+          mkdir -p .cache/previous
+          if curl -fL \
+            https://github.com/${{ github.repository }}/releases/latest/download/geofeed.jsonl.gz \
+            -o .cache/previous/geofeed.jsonl.gz; then
+            gzip -dc .cache/previous/geofeed.jsonl.gz > .cache/previous/geofeed.jsonl
+          else
+            echo "No previous release dataset found; diff will start from empty baseline."
+          fi
 
       - name: Harvest
         run: |
@@ -45,13 +57,21 @@ jobs:
             --bulk-dir .cache/rir-bulk \
             --direct-geofeed-dir .cache/direct-geofeeds \
             --normalized-rir-dump data/rir.txt \
+            --previous-jsonl .cache/previous/geofeed.jsonl \
             --concurrency 32
 
       - name: Compress dataset
         run: |
           gzip -9 -c dist/geofeed.csv > dist/geofeed.csv.gz
           gzip -9 -c dist/geofeed.jsonl > dist/geofeed.jsonl.gz
-          sha256sum dist/geofeed.csv.gz dist/geofeed.jsonl.gz dist/changelog.md > dist/SHA256SUMS
+          sha256sum \
+            dist/geofeed.csv.gz \
+            dist/geofeed.jsonl.gz \
+            dist/geofeed.parquet \
+            dist/failed-geofeeds.csv \
+            dist/diff.json \
+            dist/manifest.json \
+            dist/changelog.md > dist/SHA256SUMS
 
       - name: Upload dataset artifact
         uses: actions/upload-artifact@v4
@@ -60,6 +80,10 @@ jobs:
           path: |
             dist/geofeed.csv.gz
             dist/geofeed.jsonl.gz
+            dist/geofeed.parquet
+            dist/failed-geofeeds.csv
+            dist/diff.json
+            dist/manifest.json
             dist/changelog.md
             dist/SHA256SUMS
           retention-days: 30
@@ -87,6 +111,10 @@ jobs:
           gh release upload latest \
             dist/geofeed.csv.gz \
             dist/geofeed.jsonl.gz \
+            dist/geofeed.parquet \
+            dist/failed-geofeeds.csv \
+            dist/diff.json \
+            dist/manifest.json \
             dist/changelog.md \
             dist/SHA256SUMS \
             --clobber
@@ -97,7 +125,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p runs
           cp dist/changelog.md runs/latest-changelog.md
+          cp dist/manifest.json runs/latest-manifest.json
           cp dist/SHA256SUMS runs/latest-SHA256SUMS
-          git add runs/latest-changelog.md runs/latest-SHA256SUMS
+          git add runs/latest-changelog.md runs/latest-manifest.json runs/latest-SHA256SUMS
           git diff --cached --quiet || git commit -m "Update harvested geofeed dataset"
           git push
