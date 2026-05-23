@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from itertools import groupby
 
 from geofeed_harvester.models import RawGeofeedRow, ValidatedGeofeedRow
 
@@ -62,28 +63,36 @@ def validate_rows(
 
 def _prefer_most_specific_inetnum(rows: list[ValidatedGeofeedRow]) -> list[ValidatedGeofeedRow]:
     winners: list[ValidatedGeofeedRow] = []
-    for row in sorted(rows, key=lambda r: (r.prefix.version, int(r.prefix.network_address), -r.prefix.prefixlen)):
-        existing_idx = _find_covering_conflict(winners, row)
-        if existing_idx is None:
-            winners.append(row)
-            continue
-        existing = winners[existing_idx]
-        if row.inetnum.prefixlen > existing.inetnum.prefixlen:
-            winners[existing_idx] = _with_flag(row, "overlap_more_specific_inetnum")
-        elif row.inetnum.prefixlen == existing.inetnum.prefixlen and row.prefix.prefixlen > existing.prefix.prefixlen:
-            winners[existing_idx] = _with_flag(row, "overlap_more_specific_prefix")
-        else:
-            winners[existing_idx] = _with_flag(existing, "overlap_conflict")
-    return sorted(winners, key=lambda r: (r.prefix.version, int(r.prefix.network_address), r.prefix.prefixlen))
-
-
-def _find_covering_conflict(rows: list[ValidatedGeofeedRow], row: ValidatedGeofeedRow) -> int | None:
-    for idx, existing in enumerate(rows):
-        if existing.prefix.version != row.prefix.version:
-            continue
-        if row.prefix.overlaps(existing.prefix):
-            return idx
-    return None
+    ordered = sorted(
+        rows,
+        key=lambda r: (
+            r.prefix.version,
+            int(r.prefix.network_address),
+            int(r.prefix.broadcast_address),
+            -r.inetnum.prefixlen,
+            -r.prefix.prefixlen,
+        ),
+    )
+    for _, group in groupby(
+        ordered,
+        key=lambda r: (r.prefix.version, int(r.prefix.network_address), int(r.prefix.broadcast_address)),
+    ):
+        grouped = list(group)
+        winner = grouped[0]
+        if len(grouped) > 1:
+            top = grouped[0]
+            runner_up = grouped[1]
+            if top.inetnum.prefixlen > runner_up.inetnum.prefixlen:
+                winner = _with_flag(top, "overlap_more_specific_inetnum")
+            elif top.prefix.prefixlen > runner_up.prefix.prefixlen:
+                winner = _with_flag(top, "overlap_more_specific_prefix")
+            else:
+                winner = _with_flag(top, "overlap_conflict")
+        winners.append(winner)
+    return sorted(
+        winners,
+        key=lambda r: (r.prefix.version, int(r.prefix.network_address), r.prefix.prefixlen),
+    )
 
 
 def _with_flag(row: ValidatedGeofeedRow, flag: str) -> ValidatedGeofeedRow:

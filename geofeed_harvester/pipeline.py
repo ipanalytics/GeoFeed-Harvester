@@ -51,6 +51,7 @@ async def run_harvest(
 
     log("pipeline: validating rows")
     validated = validate_rows(raw_rows, fetched_at_by_url, bgp_verdicts=bgp_verdicts)
+    log(f"pipeline: validated rows={len(validated)}")
     log(f"pipeline: writing outputs to {out_dir}")
     write_outputs(validated, out_dir)
 
