@@ -2,6 +2,10 @@
 
 Daily first-party IP geolocation from public geofeeds.
 
+<p align="center">
+  <img src="./site/banner.png" alt="Daily first-party IP geolocation from public geofeeds." width="100%">
+</p>
+
 GeoFeed Harvester discovers RFC 8805 geofeed files from public RIR data,
 downloads them, validates every row, adds provenance, checks BGP visibility in
 bulk, and publishes a clean dataset that can be consumed by GeoForge, MMDB
