@@ -17,14 +17,14 @@ repackaging opaque commercial GeoIP databases.
 <!-- GEOFEED_STATS_START -->
 ## Latest Run
 
-- Generated at: `2026-07-28T06:11:33+00:00`
-- Valid rows: `519,089`
-- Raw rows: `581,695`
-- Unique prefixes: `519,089`
-- Unique geofeed URLs: `3,618`
-- Countries: `287`
-- Failed geofeed fetches: `966`
-- Added / removed / changed prefixes: `796` / `801` / `9,602`
+- Generated at: `2026-07-29T06:15:36+00:00`
+- Valid rows: `519,664`
+- Raw rows: `582,401`
+- Unique prefixes: `519,664`
+- Unique geofeed URLs: `3,621`
+- Countries: `290`
+- Failed geofeed fetches: `974`
+- Added / removed / changed prefixes: `1,008` / `433` / `9,697`
 - CSV gzip size: `4.3 MB`
 - JSONL gzip size: `5.4 MB`
 - Parquet size: `3.0 MB`
