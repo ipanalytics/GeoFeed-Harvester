@@ -98,12 +98,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RELEASE_DATE="$(date -u +%Y-%m-%d)"
-          RELEASE_TAG="dataset-${RELEASE_DATE}"
+          RELEASE_TAG="dataset-current"   # rolling: одна страница релиза, апдейт на месте
           RELEASE_TITLE="GeoFeed Dataset ${RELEASE_DATE}"
-
-          git fetch --tags
-          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "$RELEASE_TAG" --force
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" \
