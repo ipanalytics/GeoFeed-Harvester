@@ -1,5 +1,7 @@
 # GeoFeed Harvester
 
+_Русская версия: [README.ru.md](README.ru.md)_
+
 Daily first-party IP geolocation from public geofeeds.
 
 <p align="center">
