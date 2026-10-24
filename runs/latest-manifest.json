@@ -1,11 +1,11 @@
 {
   "countries": [
     "162.4.208.0",
+    "24",
     "26",
     "2A14:C380:C11:FFFF:FFFF:FFFF:FFFF:FFFF",
-    "32",
+    "48",
     "50.0439",
-    "64",
     "AB",
     "AD",
     "AE",
@@ -285,56 +285,56 @@
     "ZW"
   ],
   "diff": {
-    "added_count": 21962,
-    "changed_count": 616,
+    "added_count": 10245,
+    "changed_count": 6069,
     "previous_loaded": true,
-    "removed_count": 903
+    "removed_count": 502
   },
   "files": {
     "changelog.md": {
-      "bytes": 1228,
-      "sha256": "3d435bad7c6bb5cd5b83e7969e18dcee3a67e401c6da525725337557a95a5d3f"
+      "bytes": 1214,
+      "sha256": "5505cd938b0e7ed5cc98ca59be54583042b1d217818d6f6722b0adbc6dca2c92"
     },
     "diff.json": {
-      "bytes": 59168,
-      "sha256": "cf4f1d22a9e6cff488be26287ca5e5f21808da36882b976300e8bb59b04838f6"
+      "bytes": 59798,
+      "sha256": "3459c326df943cc3d93913b56aec3bf9a82ec9d47364eba14249dd5a2833bde1"
     },
     "failed-geofeeds.csv": {
-      "bytes": 337682,
-      "sha256": "861358f30ac58c12f1c4230a129bd005422ea9e9c3b4d81f402e3f57760405f4"
+      "bytes": 335571,
+      "sha256": "3a2e8ae8258dc155b096341c851b1ea08d08d728a55df55e83aa6db28d41eb1d"
     },
     "geofeed.csv.gz": {
-      "bytes": 4833116,
-      "sha256": "7a87381c568b160b87036a6baaa4c368bbb398a0a3a9cae218ef4f74b04fc72f"
+      "bytes": 4944824,
+      "sha256": "fa51e4520cdde3ec5bc9ebcbdf9b70ecbf381f0936884dcb1a7b3e9578a7e68e"
     },
     "geofeed.jsonl.gz": {
-      "bytes": 6103845,
-      "sha256": "d3fd47ffb4ea85cf0375664a973cf8e5de479e06c531bc104a73a5ea58120520"
+      "bytes": 6236318,
+      "sha256": "7a3de00c49fee1e470845517a8d3f2b8d8704dfe253b81ead92fef6b65d8a32e"
     },
     "geofeed.parquet": {
-      "bytes": 3285074,
-      "sha256": "8468b9f81d58da545ae8f0ecfb27c70b29fe59ca3735503c96cfbd9003c0dcce"
+      "bytes": 3347885,
+      "sha256": "70f08893bcef130b4517f975c2456c31f1ed14d572fa2a43e46c57c16c825d4c"
     },
     "manifest.json": {
-      "bytes": 4359,
-      "sha256": "ef9bc693b3a977f4c499da12c352d8ca867ee257afe7e4f3b9f2b189307f44fa"
+      "bytes": 4360,
+      "sha256": "4cccc81b24adb0d4a4912b4af72c56e6ba9df1d0dca034e15ebfd473f772e939"
     }
   },
-  "generated_at": "2026-10-23T08:42:57+00:00",
+  "generated_at": "2026-10-24T08:18:11+00:00",
   "schema_version": 1,
   "stats": {
     "bgp_checked": 0,
     "countries": 283,
-    "direct_rows": 13723,
-    "failed_fetches": 1325,
-    "failed_geofeed_fetches": 1325,
-    "fetches": 6158,
+    "direct_rows": 13782,
+    "failed_fetches": 1306,
+    "failed_geofeed_fetches": 1306,
+    "fetches": 6164,
     "parquet_written": true,
-    "raw_rows": 670184,
-    "refs": 97454,
+    "raw_rows": 680117,
+    "refs": 97539,
     "signature_checked_urls": 0,
-    "unique_geofeed_urls": 4264,
-    "unique_prefixes": 605697,
-    "valid_rows": 605697
+    "unique_geofeed_urls": 4285,
+    "unique_prefixes": 615440,
+    "valid_rows": 615440
   }
 }
